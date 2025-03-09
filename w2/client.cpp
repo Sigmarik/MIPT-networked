@@ -20,6 +20,9 @@ struct Player {
   Vec2f pos{};
   int ping = 0;
 
+  bool alive = false;
+
+public:
   Player(IdT id, const std::string &name) : m_id(id), m_name(name) {}
 
   IdT getId() const { return m_id; }
@@ -184,6 +187,8 @@ void Client::tick() {
 
 void Client::forEachPlayer(std::function<void(Player &)> functor) {
   for (auto &[id, player] : m_players) {
+    if (!player.alive)
+      continue;
     functor(player);
   }
 }
@@ -287,6 +292,8 @@ void Client::tickGame() {
         stream >> id >> name;
         m_players.insert({id, Player(id, name)});
       } else if (code == packtype::kDataUpdate) {
+        forEachPlayer([&](Player &player) { player.alive = false; });
+
         unsigned count = 0;
         stream >> count;
         for (unsigned _ = 0; _ < count; ++_) {
@@ -295,13 +302,16 @@ void Client::tickGame() {
           int ping = 0;
           stream >> id >> posX >> posY >> ping;
 
-          if (!m_players.contains(id) || id == m_selfId)
+          if (!m_players.contains(id))
             continue;
 
           Player &player = m_players.at(id);
-          player.pos.x = posX;
-          player.pos.y = posY;
+          if (id != m_selfId) {
+            player.pos.x = posX;
+            player.pos.y = posY;
+          }
           player.ping = ping;
+          player.alive = true;
         }
       }
 
