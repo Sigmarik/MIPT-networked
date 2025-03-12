@@ -35,6 +35,7 @@
 w*_client
 w*_lobby
 w*_server
+*_test
 
 # CMake
 CMakeLists.txt.user
