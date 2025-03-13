@@ -8,6 +8,7 @@
 #include "protocol.h"
 
 #include <map>
+#include <set>
 #include <stdlib.h>
 #include <vector>
 
@@ -81,6 +82,8 @@ int main(int argc, const char **argv) {
     controlledMap[eid] = nullptr;
   }
 
+  std::set<ENetPeer *> clientPeers{};
+
   uint32_t lastTime = enet_time_get();
   while (true) {
     uint32_t curTime = enet_time_get();
@@ -92,6 +95,7 @@ int main(int argc, const char **argv) {
       case ENET_EVENT_TYPE_CONNECT:
         printf("Connection with %x:%u established\n", event.peer->address.host,
                event.peer->address.port);
+        clientPeers.insert(event.peer);
         break;
       case ENET_EVENT_TYPE_RECEIVE: {
         NetBitInstream stream(event.packet);
@@ -106,6 +110,10 @@ int main(int argc, const char **argv) {
           assert(false);
         };
         enet_packet_destroy(event.packet);
+      } break;
+      case ENET_EVENT_TYPE_DISCONNECT: {
+        clientPeers.erase(event.peer);
+        // TODO: Send player disconnect packet to all other clients.
       } break;
       default:
         break;
@@ -126,11 +134,12 @@ int main(int argc, const char **argv) {
         }
       }
     }
+
     for (const Entity &e : entities) {
-      for (size_t i = 0; i < server->peerCount; ++i) {
-        ENetPeer *peer = &server->peers[i];
-        if (controlledMap[e.eid] != peer)
+      for (ENetPeer *peer : clientPeers) {
+        if (controlledMap[e.eid] != peer) {
           send_snapshot(peer, e.eid, e.x, e.y);
+        }
       }
     }
     // usleep(400000);

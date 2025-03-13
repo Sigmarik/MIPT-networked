@@ -1,8 +1,5 @@
 #include "protocol.h"
 
-#include <iomanip>
-#include <iostream>
-
 template <> BitOutstream &BitOutstream::operator<<(const Entity &entity) {
   *this << entity.eid;
   *this << entity.x << entity.y << entity.targetX << entity.targetY;
