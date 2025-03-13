@@ -12,6 +12,7 @@ set(W4_CLIENT_SOURCES
     main.cpp
     protocol.cpp
     bitstream.cpp
+    net_bitstream.cpp
     )
 
 set(BITSTREAM_TEST
@@ -23,6 +24,7 @@ set(W4_SERVER_SOURCES
     server.cpp
     protocol.cpp
     bitstream.cpp
+    net_bitstream.cpp
     )
 
 

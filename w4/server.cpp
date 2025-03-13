@@ -1,8 +1,10 @@
+#include <assert.h>
 #include <enet/enet.h>
 #include <iostream>
 #include <math.h>
 
 #include "entity.h"
+#include "net_bitstream.h"
 #include "protocol.h"
 
 #include <map>
@@ -42,11 +44,11 @@ void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host) {
   send_set_controlled_entity(peer, newEid);
 }
 
-void on_state(ENetPacket *packet) {
+void on_state(NetBitInstream &stream) {
   uint16_t eid = invalid_entity;
   float x = 0.f;
   float y = 0.f;
-  deserialize_entity_state(packet, eid, x, y);
+  deserialize_entity_state(stream, eid, x, y);
   for (Entity &e : entities)
     if (e.eid == eid) {
       e.x = x;
@@ -91,17 +93,20 @@ int main(int argc, const char **argv) {
         printf("Connection with %x:%u established\n", event.peer->address.host,
                event.peer->address.port);
         break;
-      case ENET_EVENT_TYPE_RECEIVE:
-        switch (get_packet_type(event.packet)) {
+      case ENET_EVENT_TYPE_RECEIVE: {
+        NetBitInstream stream(event.packet);
+        switch (get_packet_type(stream)) {
         case E_CLIENT_TO_SERVER_JOIN:
           on_join(event.packet, event.peer, server);
           break;
         case E_CLIENT_TO_SERVER_STATE:
-          on_state(event.packet);
+          on_state(stream);
           break;
+        default:
+          assert(false);
         };
         enet_packet_destroy(event.packet);
-        break;
+      } break;
       default:
         break;
       };

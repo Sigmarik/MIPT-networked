@@ -24,18 +24,22 @@ template <> BitOutstream &BitOutstream::operator<<(const int32_t &data) {
 }
 
 template <> BitOutstream &BitOutstream::operator<<(const uint8_t &data) {
-  m_stream << std::string((char *)&data, sizeof(uint8_t));
+  uint8_t netData = data;
+  m_stream << std::string((const char *)&netData, sizeof(uint8_t));
   return *this;
 }
 template <> BitOutstream &BitOutstream::operator<<(const uint16_t &data) {
   uint16_t netData = htons(data);
-  m_stream << std::string((char *)&netData, sizeof(netData));
+  m_stream << std::string((const char *)&netData, sizeof(netData));
   return *this;
 }
 template <> BitOutstream &BitOutstream::operator<<(const uint32_t &data) {
   uint32_t netData = htonl(data);
-  m_stream << std::string((char *)&netData, sizeof(netData));
+  m_stream << std::string((const char *)&netData, sizeof(netData));
   return *this;
+}
+template <> BitOutstream &BitOutstream::operator<<(const bool &data) {
+  return *this << (uint8_t)data;
 }
 
 template <> BitInstream &BitInstream::operator>>(std::string &data) {
@@ -80,5 +84,12 @@ template <> BitInstream &BitInstream::operator>>(uint16_t &data) {
 template <> BitInstream &BitInstream::operator>>(uint32_t &data) {
   data = ntohl(*(uint32_t *)m_view.begin());
   m_view.remove_prefix(sizeof(data));
+  return *this;
+}
+
+template <> BitInstream &BitInstream::operator>>(bool &data) {
+  uint8_t input = 0;
+  *this >> input;
+  data = input;
   return *this;
 }

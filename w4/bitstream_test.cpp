@@ -30,6 +30,19 @@ TEST(Bitstream, FloatChain) {
   EXPECT_EQ(result, 12.3456f);
 }
 
+TEST(Bitstream, ZeroUint8) {
+  BitOutstream outstream;
+
+  outstream << (uint8_t)0;
+
+  BitInstream instream(outstream.str());
+
+  uint8_t result = 0;
+  instream >> result;
+
+  EXPECT_EQ(result, 0);
+}
+
 TEST(Bitstream, Uint8) {
   BitOutstream outstream;
 

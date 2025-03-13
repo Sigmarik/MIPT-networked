@@ -37,6 +37,8 @@ template <> BitOutstream &BitOutstream::operator<<(const uint8_t &data);
 template <> BitOutstream &BitOutstream::operator<<(const uint16_t &data);
 template <> BitOutstream &BitOutstream::operator<<(const uint32_t &data);
 
+template <> BitOutstream &BitOutstream::operator<<(const bool &data);
+
 template <> BitInstream &BitInstream::operator>>(std::string &data);
 template <> BitInstream &BitInstream::operator>>(_Float32 &data);
 
@@ -47,3 +49,5 @@ template <> BitInstream &BitInstream::operator>>(int32_t &data);
 template <> BitInstream &BitInstream::operator>>(uint8_t &data);
 template <> BitInstream &BitInstream::operator>>(uint16_t &data);
 template <> BitInstream &BitInstream::operator>>(uint32_t &data);
+
+template <> BitInstream &BitInstream::operator>>(bool &data);
