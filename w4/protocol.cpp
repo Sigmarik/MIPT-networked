@@ -2,17 +2,21 @@
 
 template <> BitOutstream &BitOutstream::operator<<(const Entity &entity) {
   *this << entity.eid;
-  *this << entity.x << entity.y << entity.targetX << entity.targetY;
+  *this << entity.x << entity.y;
   *this << entity.serverControlled;
   *this << entity.color;
+  *this << entity.radius;
+  *this << entity.points;
   return *this;
 }
 
 template <> BitInstream &BitInstream::operator>>(Entity &entity) {
   *this >> entity.eid;
-  *this >> entity.x >> entity.y >> entity.targetX >> entity.targetY;
+  *this >> entity.x >> entity.y;
   *this >> entity.serverControlled;
   *this >> entity.color;
+  *this >> entity.radius;
+  *this >> entity.points;
   return *this;
 }
 
@@ -45,6 +49,13 @@ void send_set_controlled_entity(ENetPeer *peer, uint16_t eid) {
   stream.send(peer, 0, ENET_PACKET_FLAG_RELIABLE);
 }
 
+void send_full_entity(ENetPeer *peer, const Entity &ent) {
+  NetBitOutstream stream;
+  stream << E_SERVER_TO_CLIENT_FULL_ENTITY;
+  stream << ent;
+  stream.send(peer, 0, ENET_PACKET_FLAG_RELIABLE);
+}
+
 void send_entity_state(ENetPeer *peer, uint16_t eid, float x, float y) {
   NetBitOutstream stream;
   stream << E_CLIENT_TO_SERVER_STATE;
@@ -66,6 +77,10 @@ MessageType get_packet_type(NetBitInstream &stream) {
 }
 
 void deserialize_new_entity(NetBitInstream &stream, Entity &ent) {
+  stream >> ent;
+}
+
+void deserialize_full_entity(NetBitInstream &stream, Entity &ent) {
   stream >> ent;
 }
 

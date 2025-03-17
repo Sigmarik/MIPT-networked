@@ -14,15 +14,21 @@
 
 static std::vector<Entity> entities;
 static std::map<uint16_t, ENetPeer *> controlledMap;
+std::set<ENetPeer *> clientPeers{};
+
+static void gen_entity_params(Entity &ent) {
+  ent.x = (rand() % 40 - 20) * 30.f;
+  ent.y = (rand() % 40 - 20) * 30.f;
+  ent.radius = rand() % 10 + 5;
+}
 
 static uint16_t create_random_entity() {
   uint16_t newEid = entities.size();
   uint32_t color = 0xff000000 + 0x00440000 * (1 + rand() % 4) +
                    0x00004400 * (1 + rand() % 4) +
                    0x00000044 * (1 + rand() % 4);
-  float x = (rand() % 40 - 20) * 5.f;
-  float y = (rand() % 40 - 20) * 5.f;
-  Entity ent = {color, x, y, newEid, false, 0.f, 0.f};
+  Entity ent = {color, 0, 0, newEid, false, 0.f, 0.f};
+  gen_entity_params(ent);
   entities.push_back(ent);
   return newEid;
 }
@@ -39,8 +45,8 @@ void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host) {
   controlledMap[newEid] = peer;
 
   // send info about new entity to everyone
-  for (size_t i = 0; i < host->peerCount; ++i)
-    send_new_entity(&host->peers[i], ent);
+  for (ENetPeer *clientPeer : clientPeers)
+    send_new_entity(clientPeer, ent);
   // send info about controlled entity
   send_set_controlled_entity(peer, newEid);
 }
@@ -55,6 +61,43 @@ void on_state(NetBitInstream &stream) {
       e.x = x;
       e.y = y;
     }
+}
+
+static void announce_full_state(Entity &ent) {
+  for (ENetPeer *peer : clientPeers) {
+    send_full_entity(peer, ent);
+  }
+}
+
+static void eat(Entity &alpha, Entity &beta) {
+  alpha.radius += beta.radius / 2.0f;
+  alpha.points++;
+  alpha.eatingCooldown = 0.2f;
+  gen_entity_params(beta);
+}
+
+static void process_collisions() {
+  for (Entity &alphaEnt : entities) {
+    if (alphaEnt.eatingCooldown > 0.0f)
+      continue;
+
+    for (Entity &betaEnt : entities) {
+      if (alphaEnt.eid == betaEnt.eid)
+        continue;
+      if (alphaEnt.radius <= betaEnt.radius)
+        continue;
+
+      float deltaX = alphaEnt.x - betaEnt.x;
+      float deltaY = alphaEnt.y - betaEnt.y;
+      float distance = sqrt(deltaX * deltaX + deltaY * deltaY);
+      if (distance < alphaEnt.radius + betaEnt.radius) {
+        // One is fully inside the other
+        eat(alphaEnt, betaEnt);
+        announce_full_state(alphaEnt);
+        announce_full_state(betaEnt);
+      }
+    }
+  }
 }
 
 int main(int argc, const char **argv) {
@@ -82,7 +125,7 @@ int main(int argc, const char **argv) {
     controlledMap[eid] = nullptr;
   }
 
-  std::set<ENetPeer *> clientPeers{};
+  float sinceLastPack = 0.0f;
 
   uint32_t lastTime = enet_time_get();
   while (true) {
@@ -129,19 +172,28 @@ int main(int argc, const char **argv) {
         e.x += dirX * spd * dt;
         e.y += dirY * spd * dt;
         if (fabsf(diffX) < 10.f && fabsf(diffY) < 10.f) {
-          e.targetX = (rand() % 40 - 20) * 15.f;
-          e.targetY = (rand() % 40 - 20) * 15.f;
+          e.targetX = (rand() % 40 - 20) * 30.f;
+          e.targetY = (rand() % 40 - 20) * 30.f;
         }
       }
     }
-
-    for (const Entity &e : entities) {
-      for (ENetPeer *peer : clientPeers) {
-        if (controlledMap[e.eid] != peer) {
-          send_snapshot(peer, e.eid, e.x, e.y);
+    if (!clientPeers.empty()) {
+      process_collisions();
+    }
+    for (Entity &e : entities) {
+      e.eatingCooldown -= dt;
+    }
+    if (sinceLastPack > 0.05) {
+      sinceLastPack = 0.0f;
+      for (const Entity &e : entities) {
+        for (ENetPeer *peer : clientPeers) {
+          if (controlledMap[e.eid] != peer) {
+            send_snapshot(peer, e.eid, e.x, e.y);
+          }
         }
       }
     }
+    sinceLastPack += dt;
     // usleep(400000);
   }
 

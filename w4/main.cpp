@@ -7,6 +7,7 @@
 #include "entity.h"
 #include "net_bitstream.h"
 #include "protocol.h"
+#include <iostream>
 #include <vector>
 
 static std::vector<Entity> entities;
@@ -42,6 +43,12 @@ void on_snapshot(NetBitInstream &stream) {
     e.x = x;
     e.y = y;
   });
+}
+
+void on_full_entity_pack(NetBitInstream &stream) {
+  Entity ent;
+  deserialize_full_entity(stream, ent);
+  get_entity(ent.eid, [&](Entity &e) { e = ent; });
 }
 
 int main(int argc, const char **argv) {
@@ -86,6 +93,8 @@ int main(int argc, const char **argv) {
 
   SetTargetFPS(60); // Set our game to run at 60 frames-per-second
 
+  float sinceLastPack = 0.0f;
+
   bool connected = false;
   while (!WindowShouldClose()) {
     float dt = GetFrameTime();
@@ -112,6 +121,9 @@ int main(int argc, const char **argv) {
         case E_SERVER_TO_CLIENT_SNAPSHOT:
           on_snapshot(stream);
           break;
+        case E_SERVER_TO_CLIENT_FULL_ENTITY:
+          on_full_entity_pack(stream);
+          break;
         default:
           assert(false);
         };
@@ -131,17 +143,23 @@ int main(int argc, const char **argv) {
         e.y += ((up ? -dt : 0.f) + (down ? +dt : 0.f)) * 100.f;
 
         // Send
-        send_entity_state(serverPeer, my_entity, e.x, e.y);
+        if (sinceLastPack > 0.05) {
+          sinceLastPack = 0.0f;
+          send_entity_state(serverPeer, my_entity, e.x, e.y);
+        }
         camera.target.x = e.x;
         camera.target.y = e.y;
       });
     }
 
+    sinceLastPack += dt;
+
     BeginDrawing();
     ClearBackground(Color{40, 40, 40, 255});
     BeginMode2D(camera);
     for (const Entity &e : entities) {
-      const Rectangle rect = {e.x, e.y, 10.f, 10.f};
+      float size = e.radius * 2.0f;
+      const Rectangle rect = {e.x - size / 2, e.y - size / 2, size, size};
       DrawRectangleRec(rect, GetColor(e.color));
     }
 

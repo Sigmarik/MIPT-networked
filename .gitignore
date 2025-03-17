@@ -37,6 +37,8 @@ w*_lobby
 w*_server
 *_test
 
+.vscode
+
 # CMake
 CMakeLists.txt.user
 CMakeCache.txt

@@ -6,7 +6,7 @@ NetBitInstream::NetBitInstream(ENetPacket *packet)
 
 ENetPacket *NetBitOutstream::packet(ENetPacketFlag flag) const {
   std::string data = str();
-  return enet_packet_create(data.c_str(), data.size(), flag);
+  return enet_packet_create(data.c_str(), data.size() + 1, flag);
 }
 
 void NetBitOutstream::send(ENetPeer *peer, enet_uint8 channel,
