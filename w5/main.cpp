@@ -1,41 +1,43 @@
 // initial skeleton is a clone from https://github.com/jpcy/bgfx-minimal-example
 //
-#include <functional>
 #include "raylib.h"
+#include <cstdio>
 #include <enet/enet.h>
+#include <functional>
 #include <math.h>
 
-#include <vector>
 #include "entity.h"
 #include "protocol.h"
-
+#include <vector>
 
 static std::vector<Entity> entities;
 static uint16_t my_entity = invalid_entity;
 
-void on_new_entity_packet(ENetPacket *packet)
+void on_new_entity_packet(NetBitInstream& stream)
 {
   Entity newEntity;
-  deserialize_new_entity(packet, newEntity);
+  deserialize_new_entity(stream, newEntity);
   // TODO: Direct adressing, of course!
-  for (const Entity &e : entities)
+  for (const Entity& e : entities)
     if (e.eid == newEntity.eid)
       return; // don't need to do anything, we already have entity
-  entities.push_back(newEntity);
+  entities.push_back(std::move(newEntity));
 }
 
-void on_set_controlled_entity(ENetPacket *packet)
+void on_set_controlled_entity(NetBitInstream& stream)
 {
-  deserialize_set_controlled_entity(packet, my_entity);
+  deserialize_set_controlled_entity(stream, my_entity);
 }
 
-void on_snapshot(ENetPacket *packet)
+void on_snapshot(NetBitInstream& stream)
 {
   uint16_t eid = invalid_entity;
-  float x = 0.f; float y = 0.f; float ori = 0.f;
-  deserialize_snapshot(packet, eid, x, y, ori);
+  float x = 0.f;
+  float y = 0.f;
+  float ori = 0.f;
+  deserialize_snapshot(stream, eid, x, y, ori);
   // TODO: Direct adressing, of course!
-  for (Entity &e : entities)
+  for (Entity& e : entities)
     if (e.eid == eid)
     {
       e.x = x;
@@ -44,7 +46,7 @@ void on_snapshot(ENetPacket *packet)
     }
 }
 
-int main(int argc, const char **argv)
+int main(int argc, const char** argv)
 {
   if (enet_initialize() != 0)
   {
@@ -52,7 +54,7 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  ENetHost *client = enet_host_create(nullptr, 1, 2, 0, 0);
+  ENetHost* client = enet_host_create(nullptr, 1, 2, 0, 0);
   if (!client)
   {
     printf("Cannot create ENet client\n");
@@ -63,7 +65,7 @@ int main(int argc, const char **argv)
   enet_address_set_host(&address, "localhost");
   address.port = 10131;
 
-  ENetPeer *serverPeer = enet_host_connect(client, &address, 2, 0);
+  ENetPeer* serverPeer = enet_host_connect(client, &address, 2, 0);
   if (!serverPeer)
   {
     printf("Cannot connect to server");
@@ -84,14 +86,13 @@ int main(int argc, const char **argv)
     SetWindowSize(width, height);
   }
 
-  Camera2D camera = { {0, 0}, {0, 0}, 0.f, 1.f };
-  camera.target = Vector2{ 0.f, 0.f };
-  camera.offset = Vector2{ width * 0.5f, height * 0.5f };
+  Camera2D camera = {{0, 0}, {0, 0}, 0.f, 1.f};
+  camera.target = Vector2{0.f, 0.f};
+  camera.offset = Vector2{width * 0.5f, height * 0.5f};
   camera.rotation = 0.f;
   camera.zoom = 10.f;
 
-
-  SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
+  SetTargetFPS(60); // Set our game to run at 60 frames-per-second
 
   bool connected = false;
   while (!WindowShouldClose())
@@ -108,19 +109,23 @@ int main(int argc, const char **argv)
         connected = true;
         break;
       case ENET_EVENT_TYPE_RECEIVE:
-        switch (get_packet_type(event.packet))
+      {
+        NetBitInstream stream(event.packet);
+        switch (get_packet_type(stream))
         {
         case E_SERVER_TO_CLIENT_NEW_ENTITY:
-          on_new_entity_packet(event.packet);
+          on_new_entity_packet(stream);
+          printf("New entity!\n");
           break;
         case E_SERVER_TO_CLIENT_SET_CONTROLLED_ENTITY:
-          on_set_controlled_entity(event.packet);
+          on_set_controlled_entity(stream);
           break;
         case E_SERVER_TO_CLIENT_SNAPSHOT:
-          on_snapshot(event.packet);
+          on_snapshot(stream);
           break;
         };
-        break;
+      }
+      break;
       default:
         break;
       };
@@ -131,8 +136,8 @@ int main(int argc, const char **argv)
       bool right = IsKeyDown(KEY_RIGHT);
       bool up = IsKeyDown(KEY_UP);
       bool down = IsKeyDown(KEY_DOWN);
-      // TODO: Direct adressing, of course!
-      for (Entity &e : entities)
+      // TODO: Direct addressing, of course!
+      for (Entity& e : entities)
         if (e.eid == my_entity)
         {
           // Update
@@ -145,15 +150,15 @@ int main(int argc, const char **argv)
     }
 
     BeginDrawing();
-      ClearBackground(GRAY);
-      BeginMode2D(camera);
-        for (const Entity &e : entities)
-        {
-          const Rectangle rect = {e.x, e.y, 3.f, 1.f};
-          DrawRectanglePro(rect, {0.f, 0.5f}, e.ori * 180.f / PI, GetColor(e.color));
-        }
+    ClearBackground(GRAY);
+    BeginMode2D(camera);
+    for (const Entity& e : entities)
+    {
+      const Rectangle rect = {e.x, e.y, 3.f, 1.f};
+      DrawRectanglePro(rect, {0.f, 0.5f}, e.ori * 180.f / PI, GetColor(e.color));
+    }
 
-      EndMode2D();
+    EndMode2D();
     EndDrawing();
   }
 

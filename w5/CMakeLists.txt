@@ -8,16 +8,22 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(COMMON_SOURCES
+  protocol.cpp
+  bitstream.cpp
+  net_bitstream.cpp
+  entity.cpp
+)
+
 set(W5_SOURCES
-    main.cpp
-    protocol.cpp
-    )
+  main.cpp
+  ${COMMON_SOURCES}
+)
 
 set(W5_SERVER_SOURCES
-    server.cpp
-    protocol.cpp
-    entity.cpp
-    )
+  server.cpp
+  ${COMMON_SOURCES}
+)
 
 
 include_directories("../3rdParty/enet/include")
@@ -27,12 +33,12 @@ if(MSVC)
   add_compile_definitions(NOVIRTUALKEYCODES NOWINMESSAGES NOWINSTYLES NOSYSMETRICS NOMENUS NOICONS NOKEYSTATES NOSYSCOMMANDS NORASTEROPS NOSHOWWINDOW OEMRESOURCE NOATOM NOCLIPBOARD NOCOLOR NOCTLMGR NODRAWTEXT NOGDI NOKERNEL NOUSER NOMB NOMEMMGR NOMETAFILE NOMINMAX NOMSG NOOPENFILE NOSCROLL NOSERVICE NOSOUND NOTEXTMETRIC NOWH NOWINOFFSETS NOCOMM NOKANJI NOHELP NOPROFILER NODEFERWINDOWPOS NOMCX)
 endif()
 
-add_executable(w5 ${W5_SOURCES})
-target_link_libraries(w5 PUBLIC project_options project_warnings)
-target_link_libraries(w5 PUBLIC raylib enet)
+add_executable(w5_client ${W5_SOURCES})
+# target_link_libraries(w5_client PUBLIC project_options project_warnings)
+target_link_libraries(w5_client PUBLIC raylib enet)
 
 add_executable(w5_server ${W5_SERVER_SOURCES})
-target_link_libraries(w5_server PUBLIC project_options project_warnings)
+# target_link_libraries(w5_server PUBLIC project_options project_warnings)
 target_link_libraries(w5_server PUBLIC enet)
 
 if(MSVC)
