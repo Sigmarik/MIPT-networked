@@ -115,10 +115,10 @@ int main(int argc, const char** argv)
         ENetPeer* peer = &server->peers[i];
         // skip this here in this implementation
         // if (controlledMap[e.eid] != peer)
-        send_snapshot(peer, e.eid, e.x, e.y, e.ori);
+        send_snapshot(peer, e.eid, e.x, e.y, e.ori, e.speed, e.thr, e.steer);
       }
     }
-    usleep(100000);
+    usleep(200000);
   }
 
   enet_host_destroy(server);

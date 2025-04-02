@@ -21,6 +21,12 @@ void on_new_entity_packet(NetBitInstream& stream)
   for (const Entity& e : entities)
     if (e.eid == newEntity.eid)
       return; // don't need to do anything, we already have entity
+  newEntity.target = std::make_unique<Entity>();
+  newEntity.target->x = newEntity.x;
+  newEntity.target->y = newEntity.y;
+  newEntity.target->speed = newEntity.speed;
+  newEntity.target->thr = newEntity.thr;
+  newEntity.target->steer = newEntity.steer;
   entities.push_back(std::move(newEntity));
 }
 
@@ -35,14 +41,19 @@ void on_snapshot(NetBitInstream& stream)
   float x = 0.f;
   float y = 0.f;
   float ori = 0.f;
-  deserialize_snapshot(stream, eid, x, y, ori);
+  float speed = 0.f;
+  float thr = 0.f;
+  float steer = 0.f;
+  deserialize_snapshot(stream, eid, x, y, ori, speed, thr, steer);
   // TODO: Direct adressing, of course!
   for (Entity& e : entities)
     if (e.eid == eid)
     {
-      e.x = x;
-      e.y = y;
-      e.ori = ori;
+      e.target->x = x;
+      e.target->y = y;
+      e.target->ori = ori;
+      e.target->thr = thr;
+      e.target->steer = steer;
     }
 }
 
@@ -144,9 +155,17 @@ int main(int argc, const char** argv)
           float thr = (up ? 1.f : 0.f) + (down ? -1.f : 0.f);
           float steer = (left ? -1.f : 0.f) + (right ? 1.f : 0.f);
 
+          e.target->thr = thr;
+          e.target->steer = steer;
+
           // Send
           send_entity_input(serverPeer, my_entity, thr, steer);
         }
+    }
+
+    for (Entity& e : entities)
+    {
+      simulate_entity(e, dt);
     }
 
     BeginDrawing();

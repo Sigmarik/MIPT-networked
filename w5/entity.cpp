@@ -21,10 +21,12 @@ void simulate_entity(Entity& e, float dt)
   {
     Entity& target = *e.target;
     simulate_entity(target, dt);
-    ATTRACT(speed);
     ATTRACT(ori);
     ATTRACT(x);
     ATTRACT(y);
+    e.speed = target.speed;
+    e.steer = target.steer;
+    e.thr = target.thr;
   }
 }
 
