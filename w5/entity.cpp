@@ -4,7 +4,7 @@
 
 #include "mathUtils.h"
 
-float kTargetAttraction = 0.1;
+float kTargetAttraction = 0.07;
 
 #define ATTRACT(param) e.param = lerp(e.param, target.param, kTargetAttraction)
 

@@ -17,10 +17,10 @@ void on_new_entity_packet(NetBitInstream& stream)
 {
   Entity newEntity;
   deserialize_new_entity(stream, newEntity);
-  // TODO: Direct adressing, of course!
+  // TODO: Direct addressing, of course!
   for (const Entity& e : entities)
     if (e.eid == newEntity.eid)
-      return; // don't need to do anything, we already have entity
+      return; // don't need to do anything, we already have the entity
   newEntity.target = std::make_unique<Entity>();
   newEntity.target->x = newEntity.x;
   newEntity.target->y = newEntity.y;
@@ -45,7 +45,7 @@ void on_snapshot(NetBitInstream& stream)
   float thr = 0.f;
   float steer = 0.f;
   deserialize_snapshot(stream, eid, x, y, ori, speed, thr, steer);
-  // TODO: Direct adressing, of course!
+  // TODO: Direct addressing, of course!
   for (Entity& e : entities)
     if (e.eid == eid)
     {
