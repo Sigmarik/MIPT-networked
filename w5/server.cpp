@@ -1,18 +1,23 @@
-#include "entity.h"
-#include "mathUtils.h"
-#include "protocol.h"
-#include <enet/enet.h>
 #include <iostream>
 #include <map>
 #include <stdlib.h>
 #include <vector>
 
+#include <enet/enet.h>
+
+#include "constants.h"
+#include "entity.h"
+#include "mathUtils.h"
+#include "protocol.h"
+
 static std::vector<Entity> entities;
 static std::map<uint16_t, ENetPeer*> controlledMap;
 static std::vector<ENetPeer*> peers;
+static uint32_t tickId;
 
 void on_join(NetBitInstream& stream, ENetPeer* peer, ENetHost* host)
 {
+  send_server_time(peer, tickId);
   // send all entities
   for (const Entity& ent : entities)
     send_new_entity(peer, ent);
@@ -74,6 +79,8 @@ int main(int argc, const char** argv)
   }
 
   uint32_t lastTime = enet_time_get();
+  uint32_t lastPhysUpdate = enet_time_get();
+  uint32_t lastBroadcast = enet_time_get();
   while (true)
   {
     uint32_t curTime = enet_time_get();
@@ -109,19 +116,37 @@ int main(int argc, const char** argv)
       };
     }
     static int t = 0;
-    for (Entity& e : entities)
+    // There is a possibility to enter a "death spiral" if physics simulation gets too heavy to be processed in
+    // real time.
+    while (lastPhysUpdate + UNIVERSAL_PHYS_DT < curTime)
     {
-      // simulate
-      simulate_entity(e, dt);
-      // send
-      for (ENetPeer* peer : peers)
+      for (Entity& e : entities)
       {
-        // skip this here in this implementation
-        // if (controlledMap[e.eid] != peer)
-        send_snapshot(peer, e.eid, e.x, e.y, e.ori, e.speed, e.thr, e.steer);
+        // simulate
+        simulate_entity(e, UNIVERSAL_PHYS_DT * 0.001f);
       }
+      lastPhysUpdate += UNIVERSAL_PHYS_DT;
+      ++tickId;
     }
-    usleep(200000);
+
+    if (lastBroadcast + SERVER_BROADCAST_DT < curTime)
+    {
+      for (Entity& e : entities)
+      {
+        // send
+        for (ENetPeer* peer : peers)
+        {
+          // skip this here in this implementation
+          // if (controlledMap[e.eid] != peer)
+          send_snapshot(peer, tickId, e.eid, e.x, e.y, e.ori, e.speed, e.thr, e.steer);
+        }
+      }
+
+      lastBroadcast = curTime;
+    }
+    // We can still sleep, this till only affect the frequency of the updates.
+    // And latency, perhaps.
+    usleep(20000);
   }
 
   enet_host_destroy(server);

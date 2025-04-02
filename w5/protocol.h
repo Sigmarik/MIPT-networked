@@ -20,13 +20,16 @@ void send_server_time(ENetPeer* peer, uint32_t tickId);
 void send_new_entity(ENetPeer* peer, const Entity& ent);
 void send_set_controlled_entity(ENetPeer* peer, uint16_t eid);
 void send_entity_input(ENetPeer* peer, uint16_t eid, float thr, float steer);
-void send_snapshot(ENetPeer* peer, uint16_t eid, float x, float y, float ori, float speed, float thr, float steer);
+// Who needs structures when you can have a function that takes 9 parameters?
+void send_snapshot(ENetPeer* peer, uint32_t tick_id, uint16_t eid, float x, float y, float ori, float speed, float thr,
+                   float steer);
 
 MessageType get_packet_type(NetBitInstream& stream);
 
-void deserialize_server_time(NetBitInstream& stream, uint32_t tickId);
+void deserialize_server_time(NetBitInstream& stream, uint32_t& tickId);
 void deserialize_new_entity(NetBitInstream& stream, Entity& ent);
 void deserialize_set_controlled_entity(NetBitInstream& stream, uint16_t& eid);
 void deserialize_entity_input(NetBitInstream& stream, uint16_t& eid, float& thr, float& steer);
-void deserialize_snapshot(NetBitInstream& stream, uint16_t& eid, float& x, float& y, float& ori, float& speed,
-                          float& thr, float& steer);
+// Who needs structures when you can have a function that takes 9 parameters?
+void deserialize_snapshot(NetBitInstream& stream, uint32_t& tick_id, uint16_t& eid, float& x, float& y, float& ori,
+                          float& speed, float& thr, float& steer);

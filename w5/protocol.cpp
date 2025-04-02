@@ -22,7 +22,7 @@ void send_join(ENetPeer* peer)
   stream.send(peer, 0, ENET_PACKET_FLAG_RELIABLE);
 }
 
-void send_server_time(ENetPeer* peer, unsigned long long tickId)
+void send_server_time(ENetPeer* peer, uint32_t tickId)
 {
   NetBitOutstream stream;
   stream << E_SERVER_TO_CLIENT_TIME;
@@ -51,10 +51,11 @@ void send_entity_input(ENetPeer* peer, uint16_t eid, float thr, float steer)
   stream.send(peer, 1, ENET_PACKET_FLAG_UNSEQUENCED);
 }
 
-void send_snapshot(ENetPeer* peer, uint16_t eid, float x, float y, float ori, float speed, float thr, float steer)
+void send_snapshot(ENetPeer* peer, uint32_t tick_id, uint16_t eid, float x, float y, float ori, float speed, float thr,
+                   float steer)
 {
   NetBitOutstream stream;
-  stream << E_SERVER_TO_CLIENT_SNAPSHOT << eid << x << y << ori << speed << thr << steer;
+  stream << E_SERVER_TO_CLIENT_SNAPSHOT << tick_id << eid << x << y << ori << speed << thr << steer;
   stream.send(peer, 1, ENET_PACKET_FLAG_UNSEQUENCED);
 }
 
@@ -65,7 +66,7 @@ MessageType get_packet_type(NetBitInstream& stream)
   return type;
 }
 
-void deserialize_server_time(NetBitInstream& stream, uint32_t tickId)
+void deserialize_server_time(NetBitInstream& stream, uint32_t& tickId)
 {
   stream >> tickId;
 }
@@ -85,8 +86,8 @@ void deserialize_entity_input(NetBitInstream& stream, uint16_t& eid, float& thr,
   stream >> eid >> thr >> steer;
 }
 
-void deserialize_snapshot(NetBitInstream& stream, uint16_t& eid, float& x, float& y, float& ori, float& speed,
-                          float& thr, float& steer)
+void deserialize_snapshot(NetBitInstream& stream, uint32_t& tick_id, uint16_t& eid, float& x, float& y, float& ori,
+                          float& speed, float& thr, float& steer)
 {
-  stream >> eid >> x >> y >> ori >> speed >> thr >> steer;
+  stream >> tick_id >> eid >> x >> y >> ori >> speed >> thr >> steer;
 }

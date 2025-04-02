@@ -1,17 +1,28 @@
 // initial skeleton is a clone from https://github.com/jpcy/bgfx-minimal-example
 //
-#include "raylib.h"
+
 #include <cstdio>
 #include <enet/enet.h>
 #include <functional>
 #include <math.h>
+#include <vector>
 
+#include "constants.h"
 #include "entity.h"
 #include "protocol.h"
-#include <vector>
+#include "raylib.h"
 
 static std::vector<Entity> entities;
 static uint16_t my_entity = invalid_entity;
+
+static uint32_t tickId = 0;
+
+void on_set_time(NetBitInstream& stream)
+{
+  deserialize_server_time(stream, tickId);
+  // We could have applied a latency correction to the result, but this
+  // won't matter as we would have to reverse it every time we interact with the server.
+}
 
 void on_new_entity_packet(NetBitInstream& stream)
 {
@@ -44,7 +55,8 @@ void on_snapshot(NetBitInstream& stream)
   float speed = 0.f;
   float thr = 0.f;
   float steer = 0.f;
-  deserialize_snapshot(stream, eid, x, y, ori, speed, thr, steer);
+  uint32_t server_time = 0;
+  deserialize_snapshot(stream, server_time, eid, x, y, ori, speed, thr, steer);
   // TODO: Direct addressing, of course!
   for (Entity& e : entities)
     if (e.eid == eid)
@@ -105,13 +117,17 @@ int main(int argc, const char** argv)
 
   SetTargetFPS(60); // Set our game to run at 60 frames-per-second
 
+  uint32_t lastPhysTick = enet_time_get();
+
   bool connected = false;
   while (!WindowShouldClose())
   {
+    uint32_t curTime = enet_time_get();
     float dt = GetFrameTime();
     ENetEvent event;
     while (enet_host_service(client, &event, 0) > 0)
     {
+      uint32_t curTime = enet_time_get();
       switch (event.type)
       {
       case ENET_EVENT_TYPE_CONNECT:
@@ -124,6 +140,9 @@ int main(int argc, const char** argv)
         NetBitInstream stream(event.packet);
         switch (get_packet_type(stream))
         {
+        case E_SERVER_TO_CLIENT_TIME:
+          on_set_time(stream);
+          break;
         case E_SERVER_TO_CLIENT_NEW_ENTITY:
           on_new_entity_packet(stream);
           printf("New entity!\n");
@@ -163,9 +182,15 @@ int main(int argc, const char** argv)
         }
     }
 
-    for (Entity& e : entities)
+    while (lastPhysTick + UNIVERSAL_PHYS_DT < curTime)
     {
-      simulate_entity(e, dt);
+      for (Entity& e : entities)
+      {
+        simulate_entity(e, dt);
+      }
+
+      lastPhysTick += UNIVERSAL_PHYS_DT;
+      ++tickId;
     }
 
     BeginDrawing();
