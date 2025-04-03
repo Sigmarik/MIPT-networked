@@ -1,6 +1,16 @@
 #include "protocol.h"
 
+#include <chrono>
 #include <cstring> // memcpy
+#include <time.h>
+
+uint32_t get_reliable_time()
+{
+  static auto start_time = std::chrono::steady_clock::now();
+  auto current_time = std::chrono::steady_clock::now();
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time);
+  return static_cast<uint32_t>(elapsed_time.count());
+}
 
 static BitOutstream& operator<<(BitOutstream& stream, const MessageType& type)
 {

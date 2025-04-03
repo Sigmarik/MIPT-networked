@@ -15,6 +15,8 @@ enum MessageType : uint8_t
   E_SERVER_TO_CLIENT_SNAPSHOT
 };
 
+uint32_t get_reliable_time();
+
 void send_join(ENetPeer* peer);
 void send_server_time(ENetPeer* peer, uint32_t tickId);
 void send_new_entity(ENetPeer* peer, const Entity& ent);

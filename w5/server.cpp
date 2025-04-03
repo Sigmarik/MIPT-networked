@@ -13,7 +13,7 @@
 static std::vector<Entity> entities;
 static std::map<uint16_t, ENetPeer*> controlledMap;
 static std::vector<ENetPeer*> peers;
-static uint32_t tickId;
+static uint32_t tickId = 0;
 
 void on_join(NetBitInstream& stream, ENetPeer* peer, ENetHost* host)
 {
@@ -78,12 +78,12 @@ int main(int argc, const char** argv)
     return 1;
   }
 
-  uint32_t lastTime = enet_time_get();
-  uint32_t lastPhysUpdate = enet_time_get();
-  uint32_t lastBroadcast = enet_time_get();
+  uint32_t lastTime = get_reliable_time();
+  uint32_t lastPhysUpdate = get_reliable_time();
+  uint32_t lastBroadcast = get_reliable_time();
   while (true)
   {
-    uint32_t curTime = enet_time_get();
+    uint32_t curTime = get_reliable_time();
     float dt = (curTime - lastTime) * 0.001f;
     lastTime = curTime;
     ENetEvent event;
@@ -116,6 +116,7 @@ int main(int argc, const char** argv)
       };
     }
     static int t = 0;
+
     // There is a possibility to enter a "death spiral" if physics simulation gets too heavy to be processed in
     // real time.
     while (lastPhysUpdate + UNIVERSAL_PHYS_DT < curTime)
@@ -144,8 +145,7 @@ int main(int argc, const char** argv)
 
       lastBroadcast = curTime;
     }
-    // We can still sleep, this till only affect the frequency of the updates.
-    // And latency, perhaps.
+
     usleep(20000);
   }
 

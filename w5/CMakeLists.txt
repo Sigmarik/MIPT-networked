@@ -17,6 +17,7 @@ set(COMMON_SOURCES
 
 set(W5_SOURCES
   main.cpp
+  client_entity.cpp
   ${COMMON_SOURCES}
 )
 

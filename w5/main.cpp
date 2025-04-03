@@ -7,15 +7,16 @@
 #include <math.h>
 #include <vector>
 
+#include "client_entity.h"
 #include "constants.h"
-#include "entity.h"
 #include "protocol.h"
 #include "raylib.h"
 
-static std::vector<Entity> entities;
+static std::vector<ClientEntity> entities;
 static uint16_t my_entity = invalid_entity;
 
 static uint32_t tickId = 0;
+static uint32_t timeDilation = 0;
 
 void on_set_time(NetBitInstream& stream)
 {
@@ -29,16 +30,10 @@ void on_new_entity_packet(NetBitInstream& stream)
   Entity newEntity;
   deserialize_new_entity(stream, newEntity);
   // TODO: Direct addressing, of course!
-  for (const Entity& e : entities)
+  for (const ClientEntity& e : entities)
     if (e.eid == newEntity.eid)
       return; // don't need to do anything, we already have the entity
-  newEntity.target = std::make_unique<Entity>();
-  newEntity.target->x = newEntity.x;
-  newEntity.target->y = newEntity.y;
-  newEntity.target->speed = newEntity.speed;
-  newEntity.target->thr = newEntity.thr;
-  newEntity.target->steer = newEntity.steer;
-  entities.push_back(std::move(newEntity));
+  entities.push_back(ClientEntity(tickId, newEntity));
 }
 
 void on_set_controlled_entity(NetBitInstream& stream)
@@ -55,17 +50,22 @@ void on_snapshot(NetBitInstream& stream)
   float speed = 0.f;
   float thr = 0.f;
   float steer = 0.f;
-  uint32_t server_time = 0;
-  deserialize_snapshot(stream, server_time, eid, x, y, ori, speed, thr, steer);
+  uint32_t server_tick = 0;
+  deserialize_snapshot(stream, server_tick, eid, x, y, ori, speed, thr, steer);
+  server_tick = std::min(tickId, server_tick);
   // TODO: Direct addressing, of course!
-  for (Entity& e : entities)
+  for (ClientEntity& e : entities)
     if (e.eid == eid)
     {
-      e.target->x = x;
-      e.target->y = y;
-      e.target->ori = ori;
-      e.target->thr = thr;
-      e.target->steer = steer;
+      Entity entity = e.display_entity;
+      entity.x = x;
+      entity.y = y;
+      entity.ori = ori;
+      entity.steer = steer;
+      entity.thr = thr;
+      entity.speed = speed;
+
+      e.setAt(server_tick * UNIVERSAL_PHYS_DT, entity);
     }
 }
 
@@ -117,17 +117,17 @@ int main(int argc, const char** argv)
 
   SetTargetFPS(60); // Set our game to run at 60 frames-per-second
 
-  uint32_t lastPhysTick = enet_time_get();
+  uint32_t lastPhysTick = get_reliable_time();
 
   bool connected = false;
   while (!WindowShouldClose())
   {
-    uint32_t curTime = enet_time_get();
+    uint32_t curTime = get_reliable_time();
     float dt = GetFrameTime();
     ENetEvent event;
     while (enet_host_service(client, &event, 0) > 0)
     {
-      uint32_t curTime = enet_time_get();
+      uint32_t curTime = get_reliable_time();
       switch (event.type)
       {
       case ENET_EVENT_TYPE_CONNECT:
@@ -167,15 +167,15 @@ int main(int argc, const char** argv)
       bool up = IsKeyDown(KEY_UP);
       bool down = IsKeyDown(KEY_DOWN);
       // TODO: Direct addressing, of course!
-      for (Entity& e : entities)
+      for (ClientEntity& e : entities)
         if (e.eid == my_entity)
         {
           // Update
           float thr = (up ? 1.f : 0.f) + (down ? -1.f : 0.f);
           float steer = (left ? -1.f : 0.f) + (right ? 1.f : 0.f);
 
-          e.target->thr = thr;
-          e.target->steer = steer;
+          e.snapshots.back().state.thr = thr;
+          e.snapshots.back().state.steer = steer;
 
           // Send
           send_entity_input(serverPeer, my_entity, thr, steer);
@@ -184,9 +184,10 @@ int main(int argc, const char** argv)
 
     while (lastPhysTick + UNIVERSAL_PHYS_DT < curTime)
     {
-      for (Entity& e : entities)
+      for (ClientEntity& e : entities)
       {
-        simulate_entity(e, dt);
+        e.simulate();
+        e.clearOldSnapshots(tickId * UNIVERSAL_PHYS_DT - 3000);
       }
 
       lastPhysTick += UNIVERSAL_PHYS_DT;
@@ -196,10 +197,11 @@ int main(int argc, const char** argv)
     BeginDrawing();
     ClearBackground(GRAY);
     BeginMode2D(camera);
-    for (const Entity& e : entities)
+    for (ClientEntity& e : entities)
     {
-      const Rectangle rect = {e.x, e.y, 3.f, 1.f};
-      DrawRectanglePro(rect, {0.f, 0.5f}, e.ori * 180.f / PI, GetColor(e.color));
+      e.updateDisplay(tickId * UNIVERSAL_PHYS_DT + curTime - lastPhysTick);
+      const Rectangle rect = {e.display_entity.x, e.display_entity.y, 3.f, 1.f};
+      DrawRectanglePro(rect, {0.f, 0.5f}, e.display_entity.ori * 180.f / PI, GetColor(e.display_entity.color));
     }
 
     EndMode2D();
