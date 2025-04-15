@@ -27,12 +27,12 @@ if(MSVC)
   add_compile_definitions(NOVIRTUALKEYCODES NOWINMESSAGES NOWINSTYLES NOSYSMETRICS NOMENUS NOICONS NOKEYSTATES NOSYSCOMMANDS NORASTEROPS NOSHOWWINDOW OEMRESOURCE NOATOM NOCLIPBOARD NOCOLOR NOCTLMGR NODRAWTEXT NOGDI NOKERNEL NOUSER NOMB NOMEMMGR NOMETAFILE NOMINMAX NOMSG NOOPENFILE NOSCROLL NOSERVICE NOSOUND NOTEXTMETRIC NOWH NOWINOFFSETS NOCOMM NOKANJI NOHELP NOPROFILER NODEFERWINDOWPOS NOMCX)
 endif()
 
-add_executable(w7 ${W7_SOURCES})
-target_link_libraries(w7 PUBLIC project_options project_warnings)
-target_link_libraries(w7 PUBLIC raylib enet)
+add_executable(w7_client ${W7_SOURCES})
+# target_link_libraries(w7_client PUBLIC project_options project_warnings)
+target_link_libraries(w7_client PUBLIC raylib enet)
 
 add_executable(w7_server ${W7_SERVER_SOURCES})
-target_link_libraries(w7_server PUBLIC project_options project_warnings)
+# target_link_libraries(w7_server PUBLIC project_options project_warnings)
 target_link_libraries(w7_server PUBLIC enet)
 
 if(MSVC)
