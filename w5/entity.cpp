@@ -28,3 +28,6 @@ void simulate_entity(Entity &e, float dt)
   e.y = tile_val(e.y, worldSize);
 }
 
+void ServerEntity::update(float dt)
+{
+}

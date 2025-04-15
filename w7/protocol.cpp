@@ -13,38 +13,42 @@ void send_join(ENetPeer *peer)
 
 void send_new_entity(ENetPeer *peer, const Entity &ent)
 {
-  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(Entity),
-                                                   ENET_PACKET_FLAG_RELIABLE);
+  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(Entity), ENET_PACKET_FLAG_RELIABLE);
   uint8_t *ptr = packet->data;
-  *ptr = E_SERVER_TO_CLIENT_NEW_ENTITY; ptr += sizeof(uint8_t);
-  memcpy(ptr, &ent, sizeof(Entity)); ptr += sizeof(Entity);
+  *ptr = E_SERVER_TO_CLIENT_NEW_ENTITY;
+  ptr += sizeof(uint8_t);
+  memcpy(ptr, &ent, sizeof(Entity));
+  ptr += sizeof(Entity);
 
   enet_peer_send(peer, 0, packet);
 }
 
 void send_set_controlled_entity(ENetPeer *peer, uint16_t eid)
 {
-  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t),
-                                                   ENET_PACKET_FLAG_RELIABLE);
+  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t), ENET_PACKET_FLAG_RELIABLE);
   uint8_t *ptr = packet->data;
-  *ptr = E_SERVER_TO_CLIENT_SET_CONTROLLED_ENTITY; ptr += sizeof(uint8_t);
-  memcpy(ptr, &eid, sizeof(uint16_t)); ptr += sizeof(uint16_t);
+  *ptr = E_SERVER_TO_CLIENT_SET_CONTROLLED_ENTITY;
+  ptr += sizeof(uint8_t);
+  memcpy(ptr, &eid, sizeof(uint16_t));
+  ptr += sizeof(uint16_t);
 
   enet_peer_send(peer, 0, packet);
 }
 
 void send_entity_input(ENetPeer *peer, uint16_t eid, float thr, float steer)
 {
-  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t) +
-                                                   sizeof(uint8_t),
-                                                   ENET_PACKET_FLAG_UNSEQUENCED);
+  ENetPacket *packet =
+      enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint8_t), ENET_PACKET_FLAG_UNSEQUENCED);
   uint8_t *ptr = packet->data;
-  *ptr = E_CLIENT_TO_SERVER_INPUT; ptr += sizeof(uint8_t);
-  memcpy(ptr, &eid, sizeof(uint16_t)); ptr += sizeof(uint16_t);
+  *ptr = E_CLIENT_TO_SERVER_INPUT;
+  ptr += sizeof(uint8_t);
+  memcpy(ptr, &eid, sizeof(uint16_t));
+  ptr += sizeof(uint16_t);
   float4bitsQuantized thrPacked(thr, -1.f, 1.f);
   float4bitsQuantized steerPacked(steer, -1.f, 1.f);
   uint8_t thrSteerPacked = (thrPacked.packedVal << 4) | steerPacked.packedVal;
-  memcpy(ptr, &thrSteerPacked, sizeof(uint8_t)); ptr += sizeof(uint8_t);
+  memcpy(ptr, &thrSteerPacked, sizeof(uint8_t));
+  ptr += sizeof(uint8_t);
   /*
   memcpy(ptr, &thrPacked, sizeof(uint8_t)); ptr += sizeof(uint8_t);
   memcpy(ptr, &oriPacked, sizeof(uint8_t)); ptr += sizeof(uint8_t);
@@ -53,37 +57,76 @@ void send_entity_input(ENetPeer *peer, uint16_t eid, float thr, float steer)
   enet_peer_send(peer, 1, packet);
 }
 
-typedef PackedFloat<uint16_t, 11> PositionXQuantized;
-typedef PackedFloat<uint16_t, 10> PositionYQuantized;
+typedef PackedFloat<uint16_t, 16> PositionQuantizedHD;
+typedef PackedFloat<uint8_t, 8> PositionQuantizedLD;
 
-void send_snapshot(ENetPeer *peer, uint16_t eid, float x, float y, float ori)
+struct [[gnu::packed]] SnapshotPacketHD
 {
-  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint16_t) +
-                                                   sizeof(uint16_t) +
-                                                   sizeof(uint16_t) +
-                                                   sizeof(uint8_t),
-                                                   ENET_PACKET_FLAG_UNSEQUENCED);
-  uint8_t *ptr = packet->data;
-  *ptr = E_SERVER_TO_CLIENT_SNAPSHOT; ptr += sizeof(uint8_t);
-  memcpy(ptr, &eid, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  PositionXQuantized xPacked(x, -worldSize, worldSize);
-  PositionYQuantized yPacked(y, -worldSize, worldSize);
-  uint8_t oriPacked = pack_float<uint8_t>(ori, -PI, PI, 8);
-  //printf("xPacked/unpacked %d %f\n", xPacked, x);
-  memcpy(ptr, &xPacked.packedVal, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  memcpy(ptr, &yPacked.packedVal, sizeof(uint16_t)); ptr += sizeof(uint16_t);
-  memcpy(ptr, &oriPacked, sizeof(uint8_t)); ptr += sizeof(uint8_t);
+  uint8_t messageType; // E_SERVER_TO_CLIENT_SNAPSHOT
+  uint8_t lod;         // Lod
+  uint16_t entityId;   // eid
+  uint16_t xPacked;    // PositionQuantizedHD::packedVal for X
+  uint16_t yPacked;    // PositionQuantizedHD::packedVal for Y
+  uint8_t orientation; // packed orientation (uint8_t between -PI and PI)
+};
 
-  enet_peer_send(peer, 1, packet);
+struct [[gnu::packed]] SnapshotPacketLD
+{
+  uint8_t messageType; // E_SERVER_TO_CLIENT_SNAPSHOT
+  uint8_t lod;         // Lod
+  uint16_t entityId;   // eid
+  uint8_t xPacked;     // PositionQuantizedHD::packedVal for X
+  uint8_t yPacked;     // PositionQuantizedHD::packedVal for Y
+  uint8_t orientation; // packed orientation (uint8_t between -PI and PI)
+};
+
+void send_snapshot(ENetPeer *peer, unsigned short lodId, uint16_t eid, float x, float y, float ori)
+{
+  LOD lod = kLODs[lodId];
+
+  if (lod.quality > 0)
+  {
+
+    // Create and populate the packed structure
+    SnapshotPacketHD packet{.messageType = E_SERVER_TO_CLIENT_SNAPSHOT,
+                            .lod = (uint8_t)lodId,
+                            .entityId = eid,
+                            .xPacked = PositionQuantizedHD(x, -worldSize, worldSize).packedVal,
+                            .yPacked = PositionQuantizedHD(y, -worldSize, worldSize).packedVal,
+                            .orientation = pack_float<uint8_t>(ori, -PI, PI, 8)};
+
+    // Create and send the packet
+    ENetPacket *enetPacket = enet_packet_create(&packet, // Directly use the struct as packet data
+                                                sizeof(SnapshotPacketHD), ENET_PACKET_FLAG_UNSEQUENCED);
+
+    enet_peer_send(peer, 1, enetPacket);
+  }
+  else
+  {
+    // Create and populate the packed structure
+    SnapshotPacketLD packet{.messageType = E_SERVER_TO_CLIENT_SNAPSHOT,
+                            .lod = (uint8_t)lodId,
+                            .entityId = eid,
+                            .xPacked = PositionQuantizedLD(x, -worldSize, worldSize).packedVal,
+                            .yPacked = PositionQuantizedLD(y, -worldSize, worldSize).packedVal,
+                            .orientation = pack_float<uint8_t>(ori, -PI, PI, 4)};
+
+    // Create and send the packet
+    ENetPacket *enetPacket = enet_packet_create(&packet, // Directly use the struct as packet data
+                                                sizeof(SnapshotPacketLD), ENET_PACKET_FLAG_UNSEQUENCED);
+
+    enet_peer_send(peer, 1, enetPacket);
+  }
 }
 
 void send_time_msec(ENetPeer *peer, uint32_t timeMsec)
 {
-  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint32_t),
-                                                   ENET_PACKET_FLAG_RELIABLE);
+  ENetPacket *packet = enet_packet_create(nullptr, sizeof(uint8_t) + sizeof(uint32_t), ENET_PACKET_FLAG_RELIABLE);
   uint8_t *ptr = packet->data;
-  *ptr = E_SERVER_TO_CLIENT_TIME_MSEC; ptr += sizeof(uint8_t);
-  memcpy(ptr, &timeMsec, sizeof(uint32_t)); ptr += sizeof(uint32_t);
+  *ptr = E_SERVER_TO_CLIENT_TIME_MSEC;
+  ptr += sizeof(uint8_t);
+  memcpy(ptr, &timeMsec, sizeof(uint32_t));
+  ptr += sizeof(uint32_t);
 
   enet_peer_send(peer, 0, packet);
 }
@@ -95,21 +138,28 @@ MessageType get_packet_type(ENetPacket *packet)
 
 void deserialize_new_entity(ENetPacket *packet, Entity &ent)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  ent = *(Entity*)(ptr); ptr += sizeof(Entity);
+  uint8_t *ptr = packet->data;
+  ptr += sizeof(uint8_t);
+  ent = *(Entity *)(ptr);
+  ptr += sizeof(Entity);
 }
 
 void deserialize_set_controlled_entity(ENetPacket *packet, uint16_t &eid)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  eid = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
+  uint8_t *ptr = packet->data;
+  ptr += sizeof(uint8_t);
+  eid = *(uint16_t *)(ptr);
+  ptr += sizeof(uint16_t);
 }
 
 void deserialize_entity_input(ENetPacket *packet, uint16_t &eid, float &thr, float &steer)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  eid = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  uint8_t thrSteerPacked = *(uint8_t*)(ptr); ptr += sizeof(uint8_t);
+  uint8_t *ptr = packet->data;
+  ptr += sizeof(uint8_t);
+  eid = *(uint16_t *)(ptr);
+  ptr += sizeof(uint16_t);
+  uint8_t thrSteerPacked = *(uint8_t *)(ptr);
+  ptr += sizeof(uint8_t);
   /*
   uint8_t thrPacked = *(uint8_t*)(ptr); ptr += sizeof(uint8_t);
   uint8_t oriPacked = *(uint8_t*)(ptr); ptr += sizeof(uint8_t);
@@ -124,21 +174,30 @@ void deserialize_entity_input(ENetPacket *packet, uint16_t &eid, float &thr, flo
 
 void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y, float &ori)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  eid = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  uint16_t xPacked = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  uint16_t yPacked = *(uint16_t*)(ptr); ptr += sizeof(uint16_t);
-  PositionXQuantized xPackedVal(xPacked);
-  PositionYQuantized yPackedVal(yPacked);
-  uint8_t oriPacked = *(uint8_t*)(ptr); ptr += sizeof(uint8_t);
-  x = xPackedVal.unpack(-worldSize, worldSize);
-  y = yPackedVal.unpack(-worldSize, worldSize);
-  ori = unpack_float<uint8_t>(oriPacked, -PI, PI, 8);
+  const uint8_t lodId = packet->data[1];
+
+  if (kLODs[lodId].quality > 0)
+  {
+    const auto &hd = *reinterpret_cast<const SnapshotPacketHD *>(packet->data);
+    eid = hd.entityId;
+    x = PositionQuantizedHD(hd.xPacked).unpack(-worldSize, worldSize);
+    y = PositionQuantizedHD(hd.yPacked).unpack(-worldSize, worldSize);
+    ori = unpack_float<uint8_t>(hd.orientation, -PI, PI, 8);
+  }
+  else
+  {
+    const auto &ld = *reinterpret_cast<const SnapshotPacketLD *>(packet->data);
+    eid = ld.entityId;
+    x = PositionQuantizedLD(ld.xPacked).unpack(-worldSize, worldSize);
+    y = PositionQuantizedLD(ld.yPacked).unpack(-worldSize, worldSize);
+    ori = unpack_float<uint8_t>(ld.orientation, -PI, PI, 4);
+  }
 }
 
 void deserialize_time_msec(ENetPacket *packet, uint32_t &timeMsec)
 {
-  uint8_t *ptr = packet->data; ptr += sizeof(uint8_t);
-  timeMsec = *(uint32_t*)(ptr); ptr += sizeof(uint32_t);
+  uint8_t *ptr = packet->data;
+  ptr += sizeof(uint8_t);
+  timeMsec = *(uint32_t *)(ptr);
+  ptr += sizeof(uint32_t);
 }
-
