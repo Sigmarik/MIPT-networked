@@ -7,26 +7,28 @@
 #include <stdlib.h>
 #include <vector>
 
-static std::vector<Entity> entities;
+static std::vector<ServerEntity> entities;
 static std::map<uint16_t, ENetPeer *> controlledMap;
 
 void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
 {
   // send all entities
-  for (const Entity &ent : entities)
-    send_new_entity(peer, ent);
+  for (const ServerEntity &ent : entities)
+    send_new_entity(peer, ent.entity);
 
   // find max eid
-  uint16_t maxEid = entities.empty() ? invalid_entity : entities[0].eid;
-  for (const Entity &e : entities)
-    maxEid = std::max(maxEid, e.eid);
+  uint16_t maxEid = entities.empty() ? invalid_entity : entities[0].entity.eid;
+  for (const ServerEntity &e : entities)
+    maxEid = std::max(maxEid, e.entity.eid);
   uint16_t newEid = maxEid + 1;
   uint32_t color =
       0x000000ff + 0x44000000 * (rand() % 4 + 1) + 0x00440000 * (rand() % 4 + 1) + 0x00004400 * (rand() % 4 + 1);
   float x = (rand() % 4) * 5.f;
   float y = (rand() % 4) * 5.f;
   Entity ent = {color, false, x, y, 0.f, (rand() / RAND_MAX) * 3.141592654f, 0.f, 0.f, 0.f, 0.f, newEid};
-  entities.push_back(ent);
+  ServerEntity sent;
+  sent.entity = ent;
+  entities.push_back(sent);
 
   controlledMap[newEid] = peer;
 
@@ -40,15 +42,17 @@ void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
 void create_server_entity(ENetHost *host)
 {
   // find max eid
-  uint16_t maxEid = entities.empty() ? invalid_entity : entities[0].eid;
-  for (const Entity &e : entities)
-    maxEid = std::max(maxEid, e.eid);
+  uint16_t maxEid = entities.empty() ? invalid_entity : entities[0].entity.eid;
+  for (const ServerEntity &e : entities)
+    maxEid = std::max(maxEid, e.entity.eid);
   uint16_t newEid = maxEid + 1;
   uint32_t color = 0xff000000 + 0x00440000 * (rand() % 5) + 0x00004400 * (rand() % 5) + 0x00000044 * (rand() % 5);
   float x = rand() % int(worldSize * 2) - worldSize;
   float y = rand() % int(worldSize * 2) - worldSize;
   Entity ent = {color, true, x, y, 0.f, (rand() / RAND_MAX) * 3.141592654f, 0.f, 0.f, 0.f, 0.f, newEid};
-  entities.push_back(ent);
+  ServerEntity sent;
+  sent.entity = ent;
+  entities.push_back(sent);
 
   // send info about new entity to everyone
   for (size_t i = 0; i < host->peerCount; ++i)
@@ -61,11 +65,11 @@ void on_input(ENetPacket *packet)
   float thr = 0.f;
   float steer = 0.f;
   deserialize_entity_input(packet, eid, thr, steer);
-  for (Entity &e : entities)
-    if (e.eid == eid)
+  for (ServerEntity &e : entities)
+    if (e.entity.eid == eid)
     {
-      e.thr = thr;
-      e.steer = steer;
+      e.entity.thr = thr;
+      e.entity.steer = steer;
     }
 }
 
@@ -109,19 +113,19 @@ static void update_ai(Entity &e, float dt)
 
 static void simulate_world(ENetHost *server, float dt)
 {
-  for (Entity &e : entities)
+  for (ServerEntity &e : entities)
   {
-    if (e.serverControlled)
-      update_ai(e, dt);
+    if (e.entity.serverControlled)
+      update_ai(e.entity, dt);
     // simulate
-    simulate_entity(e, dt);
+    simulate_entity(e.entity, dt);
     // send
     for (size_t i = 0; i < server->peerCount; ++i)
     {
       ENetPeer *peer = &server->peers[i];
       // skip this here in this implementation
       // if (controlledMap[e.eid] != peer)
-      send_snapshot(peer, 0, e.eid, e.x, e.y, e.ori);
+      send_snapshot(peer, 0, e.entity.eid, e.entity.x, e.entity.y, e.entity.ori);
     }
   }
 }
