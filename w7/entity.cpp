@@ -30,3 +30,21 @@ void simulate_entity(Entity &e, float dt)
   e.y = tile_val(e.y, worldSize);
 }
 
+LOD kLODs[kNetLODs] = {
+    LOD{1, 0.01f, 20.0f},
+    LOD{1, 0.05f, 50.0f},
+    LOD{0, 0.1f, 70.0f},
+    LOD{0, 0.5f, -1.0f},
+};
+
+unsigned short get_lod(float distance)
+{
+  for (unsigned i = 0; i < kNetLODs; ++i)
+  {
+    if (distance <= kLODs[i].upperBound || kLODs[i].upperBound < 0.0f)
+    {
+      return i;
+    }
+  }
+  return 0; // Return lowest quality as fallback
+}

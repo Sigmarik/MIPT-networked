@@ -58,13 +58,17 @@ void on_snapshot(ENetPacket *packet)
   float x = 0.f;
   float y = 0.f;
   float ori = 0.f;
-  deserialize_snapshot(packet, eid, x, y, ori);
+  float vx = 0.0f, vy = 0.0f, omega = 0.0f;
+  deserialize_snapshot(packet, eid, x, y, ori, vx, vy, omega);
   get_entity(eid,
              [&](Entity &e)
              {
                e.x = x;
                e.y = y;
                e.ori = ori;
+               e.vx = vx;
+               e.vy = vy;
+               e.omega = omega;
              });
 }
 
@@ -132,7 +136,7 @@ static void update_net(ENetHost *client, ENetPeer *serverPeer)
   }
 }
 
-static void simulate_world(ENetPeer *serverPeer)
+static void simulate_world(ENetPeer *serverPeer, float dt)
 {
   if (my_entity != invalid_entity)
   {
@@ -146,10 +150,17 @@ static void simulate_world(ENetPeer *serverPeer)
                  // Update
                  float thr = (up ? 1.f : 0.f) + (down ? -1.f : 0.f);
                  float steer = (left ? -1.f : 0.f) + (right ? 1.f : 0.f);
+                 e.thr = thr;
+                 e.steer = steer;
 
                  // Send
                  send_entity_input(serverPeer, my_entity, thr, steer);
                });
+  }
+
+  for (Entity &e : entities)
+  {
+    simulate_entity(e, dt);
   }
 }
 
@@ -264,7 +275,7 @@ int main(int argc, const char **argv)
 
     update_net(client, serverPeer);
     update_bandwidth(dt, client, bandwidthAccumulator);
-    simulate_world(serverPeer);
+    simulate_world(serverPeer, dt);
     update_camera(camera);
     draw_world(camera, bandwidthAccumulator);
   }

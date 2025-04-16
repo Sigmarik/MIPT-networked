@@ -8,7 +8,9 @@
 #include <vector>
 
 static std::vector<ServerEntity> entities;
+// BiMap would have hit the spot there...
 static std::map<uint16_t, ENetPeer *> controlledMap;
+static std::map<ENetPeer *, uint16_t> controlledEntities;
 
 void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
 {
@@ -28,7 +30,15 @@ void on_join(ENetPacket *packet, ENetPeer *peer, ENetHost *host)
   Entity ent = {color, false, x, y, 0.f, (rand() / RAND_MAX) * 3.141592654f, 0.f, 0.f, 0.f, 0.f, newEid};
   ServerEntity sent;
   sent.entity = ent;
+  for (auto &[id, peer] : controlledMap)
+  {
+    sent.deadReckonings[id] = sent.entity;
+  }
   entities.push_back(sent);
+  controlledEntities[peer] = newEid;
+
+  for (ServerEntity &e : entities)
+    e.deadReckonings[newEid] = e.entity;
 
   controlledMap[newEid] = peer;
 
@@ -52,7 +62,14 @@ void create_server_entity(ENetHost *host)
   Entity ent = {color, true, x, y, 0.f, (rand() / RAND_MAX) * 3.141592654f, 0.f, 0.f, 0.f, 0.f, newEid};
   ServerEntity sent;
   sent.entity = ent;
+  for (auto &[id, peer] : controlledMap)
+  {
+    sent.deadReckonings[id] = sent.entity;
+  }
   entities.push_back(sent);
+
+  for (ServerEntity &e : entities)
+    e.deadReckonings[newEid] = e.entity;
 
   // send info about new entity to everyone
   for (size_t i = 0; i < host->peerCount; ++i)
@@ -111,6 +128,19 @@ static void update_ai(Entity &e, float dt)
     e.steer = e.steer != 0.f ? 0.f : ((rand() % 2) * 2.f - 1.f);
 }
 
+static float manhattan_distance(const Entity &e1, const Entity &e2)
+{
+  float deltaX = e1.x - e2.x;
+  float deltaY = e1.y - e2.y;
+  return std::min(abs(deltaX), abs(worldSize - deltaX)) + std::min(abs(deltaY), abs(worldSize - deltaY));
+}
+
+static float angular_distance(const Entity &e1, const Entity &e2)
+{
+  float deltaPhi = e1.ori - e2.ori;
+  return std::min(abs(deltaPhi), abs(2 * PI - deltaPhi));
+}
+
 static void simulate_world(ENetHost *server, float dt)
 {
   for (ServerEntity &e : entities)
@@ -119,13 +149,38 @@ static void simulate_world(ENetHost *server, float dt)
       update_ai(e.entity, dt);
     // simulate
     simulate_entity(e.entity, dt);
+    for (auto &[id, replica] : e.deadReckonings)
+    {
+      simulate_entity(replica, dt);
+    }
     // send
     for (size_t i = 0; i < server->peerCount; ++i)
     {
+      // TODO: Implement
       ENetPeer *peer = &server->peers[i];
+      if (controlledEntities.find(peer) == controlledEntities.end())
+        continue;
+      uint16_t peerEid = controlledEntities[peer];
+      ServerEntity peerEntity = entities[peerEid];
+
+      float distance = manhattan_distance(peerEntity.entity, e.entity);
+
+      unsigned lodId = get_lod(distance);
+      LOD lod = kLODs[lodId];
+
+      Entity approximation = e.deadReckonings[peerEid];
+      float approxMhDistance = manhattan_distance(approximation, e.entity);
+      float approxAngDistance = angular_distance(approximation, e.entity);
+
+      if (lod.deadReckoningThreshold * 2.0f > approxMhDistance && lod.deadReckoningThreshold > approxAngDistance)
+        continue;
+
+      e.deadReckonings[peerEid] = e.entity;
+
       // skip this here in this implementation
       // if (controlledMap[e.eid] != peer)
-      send_snapshot(peer, 0, e.entity.eid, e.entity.x, e.entity.y, e.entity.ori);
+      send_snapshot(peer, lodId, e.entity.eid, e.entity.x, e.entity.y, e.entity.ori, e.entity.vx, e.entity.vy,
+                    e.entity.omega);
     }
   }
 }

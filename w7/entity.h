@@ -39,12 +39,9 @@ struct LOD
 };
 
 static constexpr unsigned kNetLODs = 4;
-static LOD kLODs[kNetLODs] = {
-    LOD{1, 0.01f, 5.0f},
-    LOD{1, 0.05f, 20.0f},
-    LOD{0, 0.1f, 40.0f},
-    LOD{0, 0.5f, -1.0f},
-};
+extern LOD kLODs[kNetLODs];
+
+unsigned short get_lod(float distance);
 
 struct ServerEntity
 {

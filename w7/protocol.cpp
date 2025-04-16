@@ -57,8 +57,15 @@ void send_entity_input(ENetPeer *peer, uint16_t eid, float thr, float steer)
   enet_peer_send(peer, 1, packet);
 }
 
-typedef PackedFloat<uint16_t, 16> PositionQuantizedHD;
-typedef PackedFloat<uint8_t, 8> PositionQuantizedLD;
+static constexpr unsigned HDPositionBits = 16;
+static constexpr unsigned LDPositionBits = 8;
+static constexpr unsigned HDRotationBits = 8;
+static constexpr unsigned LDRotationBits = 5;
+
+typedef PackedFloat<uint16_t, HDPositionBits> PositionQuantizedHD;
+typedef PackedFloat<uint8_t, LDPositionBits> PositionQuantizedLD;
+typedef PackedFloat<uint8_t, 8> VelocityQuantized;
+typedef PackedFloat<uint8_t, 8> OmegaQuantized;
 
 struct [[gnu::packed]] SnapshotPacketHD
 {
@@ -68,6 +75,9 @@ struct [[gnu::packed]] SnapshotPacketHD
   uint16_t xPacked;    // PositionQuantizedHD::packedVal for X
   uint16_t yPacked;    // PositionQuantizedHD::packedVal for Y
   uint8_t orientation; // packed orientation (uint8_t between -PI and PI)
+  uint8_t velXPacked;
+  uint8_t velYPacked;
+  uint8_t omegaPacked;
 };
 
 struct [[gnu::packed]] SnapshotPacketLD
@@ -78,9 +88,13 @@ struct [[gnu::packed]] SnapshotPacketLD
   uint8_t xPacked;     // PositionQuantizedHD::packedVal for X
   uint8_t yPacked;     // PositionQuantizedHD::packedVal for Y
   uint8_t orientation; // packed orientation (uint8_t between -PI and PI)
+  uint8_t velXPacked;
+  uint8_t velYPacked;
+  uint8_t omegaPacked;
 };
 
-void send_snapshot(ENetPeer *peer, unsigned short lodId, uint16_t eid, float x, float y, float ori)
+void send_snapshot(ENetPeer *peer, unsigned short lodId, uint16_t eid, float x, float y, float ori, float velX,
+                   float velY, float omega)
 {
   LOD lod = kLODs[lodId];
 
@@ -88,12 +102,17 @@ void send_snapshot(ENetPeer *peer, unsigned short lodId, uint16_t eid, float x, 
   {
 
     // Create and populate the packed structure
-    SnapshotPacketHD packet{.messageType = E_SERVER_TO_CLIENT_SNAPSHOT,
-                            .lod = (uint8_t)lodId,
-                            .entityId = eid,
-                            .xPacked = PositionQuantizedHD(x, -worldSize, worldSize).packedVal,
-                            .yPacked = PositionQuantizedHD(y, -worldSize, worldSize).packedVal,
-                            .orientation = pack_float<uint8_t>(ori, -PI, PI, 8)};
+    SnapshotPacketHD packet{
+        .messageType = E_SERVER_TO_CLIENT_SNAPSHOT,
+        .lod = (uint8_t)lodId,
+        .entityId = eid,
+        .xPacked = PositionQuantizedHD(x, -worldSize, worldSize).packedVal,
+        .yPacked = PositionQuantizedHD(y, -worldSize, worldSize).packedVal,
+        .orientation = pack_float<uint8_t>(ori, -PI, PI, HDRotationBits),
+        .velXPacked = pack_float<uint8_t>(velX, -40.0f, 40.0f, 8),
+        .velYPacked = pack_float<uint8_t>(velY, -40.0f, 40.0f, 8),
+        .omegaPacked = pack_float<uint8_t>(omega, -10.0f, 10.0f, 8),
+    };
 
     // Create and send the packet
     ENetPacket *enetPacket = enet_packet_create(&packet, // Directly use the struct as packet data
@@ -104,12 +123,17 @@ void send_snapshot(ENetPeer *peer, unsigned short lodId, uint16_t eid, float x, 
   else
   {
     // Create and populate the packed structure
-    SnapshotPacketLD packet{.messageType = E_SERVER_TO_CLIENT_SNAPSHOT,
-                            .lod = (uint8_t)lodId,
-                            .entityId = eid,
-                            .xPacked = PositionQuantizedLD(x, -worldSize, worldSize).packedVal,
-                            .yPacked = PositionQuantizedLD(y, -worldSize, worldSize).packedVal,
-                            .orientation = pack_float<uint8_t>(ori, -PI, PI, 4)};
+    SnapshotPacketLD packet{
+        .messageType = E_SERVER_TO_CLIENT_SNAPSHOT,
+        .lod = (uint8_t)lodId,
+        .entityId = eid,
+        .xPacked = PositionQuantizedLD(x, -worldSize, worldSize).packedVal,
+        .yPacked = PositionQuantizedLD(y, -worldSize, worldSize).packedVal,
+        .orientation = pack_float<uint8_t>(ori, -PI, PI, LDRotationBits),
+        .velXPacked = pack_float<uint8_t>(velX, -40.0f, 40.0f, 8),
+        .velYPacked = pack_float<uint8_t>(velY, -40.0f, 40.0f, 8),
+        .omegaPacked = pack_float<uint8_t>(omega, -10.0f, 10.0f, 8),
+    };
 
     // Create and send the packet
     ENetPacket *enetPacket = enet_packet_create(&packet, // Directly use the struct as packet data
@@ -172,7 +196,8 @@ void deserialize_entity_input(ENetPacket *packet, uint16_t &eid, float &thr, flo
   steer = steerPacked.packedVal == neutralPackedValue ? 0.f : steerPacked.unpack(-1.f, 1.f);
 }
 
-void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y, float &ori)
+void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y, float &ori, float &velX, float &velY,
+                          float &omega)
 {
   const uint8_t lodId = packet->data[1];
 
@@ -182,7 +207,10 @@ void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y,
     eid = hd.entityId;
     x = PositionQuantizedHD(hd.xPacked).unpack(-worldSize, worldSize);
     y = PositionQuantizedHD(hd.yPacked).unpack(-worldSize, worldSize);
-    ori = unpack_float<uint8_t>(hd.orientation, -PI, PI, 8);
+    ori = unpack_float<uint8_t>(hd.orientation, -PI, PI, HDRotationBits);
+    velX = unpack_float<uint8_t>(hd.velXPacked, -40, 40, 8);
+    velY = unpack_float<uint8_t>(hd.velYPacked, -40, 40, 8);
+    omega = unpack_float<uint8_t>(hd.omegaPacked, -10, 10, 8);
   }
   else
   {
@@ -190,7 +218,10 @@ void deserialize_snapshot(ENetPacket *packet, uint16_t &eid, float &x, float &y,
     eid = ld.entityId;
     x = PositionQuantizedLD(ld.xPacked).unpack(-worldSize, worldSize);
     y = PositionQuantizedLD(ld.yPacked).unpack(-worldSize, worldSize);
-    ori = unpack_float<uint8_t>(ld.orientation, -PI, PI, 4);
+    ori = unpack_float<uint8_t>(ld.orientation, -PI, PI, LDRotationBits);
+    velX = unpack_float<uint8_t>(ld.velXPacked, -40, 40, 8);
+    velY = unpack_float<uint8_t>(ld.velYPacked, -40, 40, 8);
+    omega = unpack_float<uint8_t>(ld.omegaPacked, -10, 10, 8);
   }
 }
 

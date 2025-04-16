@@ -11,6 +11,7 @@ SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(W7_SOURCES
     main.cpp
     protocol.cpp
+    entity.cpp
     )
 
 set(W7_SERVER_SOURCES
